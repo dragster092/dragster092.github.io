@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电气控制系统——智慧库的大脑与神经</title>
+    <style>
+        /* ==============================================
+           全局样式与CSS变量
+           ============================================== */
+        :root {
+            /* 基础颜色 */
+            --bg-dark: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.8);
+            --border-light: rgba(255,255,255,0.1);
+            
+            /* 功能颜色 */
+            --plc-blue: #38bdf8;
+            --vfd-purple: #818cf8;
+            --signal-green: #10b981;
+            --power-amber: #f59e0b;
+            --danger-red: #ef4444;
+            
+            /* 文本颜色 */
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+            
+            /* 动画参数 */
+            --animation-speed-fast: 0.5s;
+            --animation-speed-normal: 1s;
+            --animation-speed-slow: 2s;
+            
+            /* 尺寸参数 */
+            --canvas-width: 1200px;
+            --canvas-height: 800px;
+            --responsive-breakpoint: 768px;
+        }
+
+        /* ==============================================
+           基础重置与通用样式
+           ============================================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            padding: 20px;
+        }
+
+        /* ==============================================
+           核心画布样式
+           ============================================== */
+        .canvas {
+            position: relative;
+            width: min(var(--canvas-width), 100%);
+            height: min(var(--canvas-height), 100vh - 40px);
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 24px;
+            box-shadow: 0 0 60px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+
+        /* ==============================================
+           顶部标题区域
+           ============================================== */
+        .header {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 1000px;
+            text-align: center;
+            z-index: 30;
+        }
+
+        .header h1 {
+            font-size: clamp(1.8rem, 3vw, 2rem);
+            margin-bottom: 15px;
+            background: linear-gradient(to right, var(--plc-blue), var(--vfd-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            font-size: clamp(0.9rem, 1.5vw, 1rem);
+            color: var(--text-dim);
+            line-height: 1.5;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 15px;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+
+        /* ==============================================
+           PLC 核心控制单元
+           ============================================== */
+        .plc-unit {
+            position: absolute;
+            left: 50%;
+            top: 55%;
+            transform: translate(-50%, -50%);
+            width: clamp(180px, 18vw, 220px);
+            height: clamp(250px, 35vw, 300px);
+            background: linear-gradient(135deg, #334155, #1e293b);
+            border: 3px solid var(--plc-blue);
+            border-radius: 12px;
+            box-shadow: 0 0 40px rgba(56, 189, 248, 0.3);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px;
+        }
+
+        .plc-label {
+            color: var(--plc-blue);
+            font-weight: bold;
+            font-size: clamp(1rem, 1.5vw, 1.125rem);
+            margin-bottom: 15px;
+            letter-spacing: 2px;
+        }
+
+        .plc-screen {
+            width: 100%;
+            height: 120px;
+            background: #000;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: var(--plc-blue);
+            animation: scan var(--animation-speed-slow) infinite linear;
+        }
+
+        .scan-line:nth-child(2) {
+            top: 60%;
+            animation-delay: calc(var(--animation-speed-slow) * -0.5);
+        }
+
+        .plc-status-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            width: 100%;
+        }
+
+        .status-led {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #475569;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .status-led.led-active {
+            background: var(--signal-green);
+            box-shadow: 0 0 10px var(--signal-green);
+            animation: blink var(--animation-speed-fast) infinite alternate;
+        }
+
+        .plc-footer {
+            margin-top: auto;
+            color: var(--text-dim);
+            font-size: 0.75rem;
+        }
+
+        /* ==============================================
+           变频器 (VFD) 单元
+           ============================================== */
+        .vfd-unit {
+            position: absolute;
+            left: clamp(5%, 8vw, 10%);
+            top: 60%;
+            width: clamp(150px, 15vw, 180px);
+            height: clamp(200px, 28vw, 240px);
+            background: #1e293b;
+            border: 2px solid var(--vfd-purple);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+            z-index: 15;
+        }
+
+        .vfd-label {
+            color: var(--vfd-purple);
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .vfd-screen {
+            width: 80%;
+            height: 60px;
+            background: #000;
+            border-radius: 4px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--vfd-purple);
+            font-family: 'Courier New', monospace;
+            font-size: clamp(1.2rem, 2vw, 1.5rem);
+            font-weight: bold;
+        }
+
+        .vfd-desc {
+            color: var(--text-dim);
+            font-size: 0.75rem;
+            margin-top: 10px;
+        }
+
+        .vfd-indicators {
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            margin-top: 30px;
+        }
+
+        .indicator-light {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+
+        .indicator-light.error {
+            background: var(--danger-red);
+        }
+
+        .indicator-light.running {
+            background: var(--signal-green);
+            box-shadow: 0 0 10px var(--signal-green);
+        }
+
+        /* ==============================================
+           传感器与继电器区域
+           ============================================== */
+        .sensor-relay-zone {
+            position: absolute;
+            right: clamp(5%, 8vw, 10%);
+            top: 60%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            z-index: 15;
+        }
+
+        .component-card {
+            width: clamp(180px, 18vw, 200px);
+            padding: 15px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            transition: transform 0.2s ease;
+        }
+
+        .component-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--plc-blue);
+        }
+
+        .icon-box {
+            width: 40px;
+            height: 40px;
+            background: rgba(56, 189, 248, 0.1);
+            border-radius: 4px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--plc-blue);
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .icon-box.relay {
+            color: var(--vfd-purple);
+        }
+
+        .component-info {
+            flex: 1;
+        }
+
+        .component-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .component-desc {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        /* ==============================================
+           信号流动与神经网络
+           ============================================== */
+        .nerve-system {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        .signal-particle {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: var(--plc-blue);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--plc-blue);
+            offset-path: path(var(--path));
+            animation: flow 3s infinite linear;
+        }
+
+        .signal-particle.vfd {
+            --plc-blue: var(--vfd-purple);
+            animation-duration: 4s;
+        }
+
+        .signal-particle.sensor {
+            --plc-blue: var(--signal-green);
+            animation-duration: 2s;
+        }
+
+        /* ==============================================
+           功能标注卡片
+           ============================================== */
+        .feature-tag {
+            position: absolute;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid var(--plc-blue);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            color: var(--plc-blue);
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .feature-tag:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+        }
+
+        .feature-tag.status-feedback {
+            border-color: var(--signal-green);
+            color: var(--signal-green);
+        }
+
+        .feature-tag.machine-control {
+            border-color: var(--vfd-purple);
+            color: var(--vfd-purple);
+        }
+
+        /* ==============================================
+           底部供电标识
+           ============================================== */
+        .power-bus {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: clamp(500px, 70vw, 800px);
+            height: 60px;
+            background: rgba(245, 158, 11, 0.05);
+            border: 1px dashed var(--power-amber);
+            border-radius: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            padding: 0 20px;
+        }
+
+        .power-label {
+            color: var(--power-amber);
+            font-weight: bold;
+            font-size: clamp(1rem, 1.2vw, 1.125rem);
+            white-space: nowrap;
+        }
+
+        .power-label.small {
+            font-size: 0.875rem;
+            opacity: 0.8;
+        }
+
+        .power-bars {
+            display: flex;
+            gap: 10px;
+        }
+
+        .power-bar {
+            width: clamp(80px, 10vw, 100px);
+            height: 4px;
+            background: var(--power-amber);
+            border-radius: 2px;
+            opacity: 0.5;
+            transition: opacity 0.3s ease;
+        }
+
+        .power-bus:hover .power-bar {
+            opacity: 1;
+        }
+
+        /* ==============================================
+           动画定义
+           ============================================== */
+        @keyframes blink {
+            from { opacity: 0.3; }
+            to { opacity: 1; }
+        }
+
+        @keyframes scan {
+            0% { transform: translateY(-20px); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateY(120px); opacity: 0; }
+        }
+
+        @keyframes flow {
+            from { offset-distance: 0%; }
+            to { offset-distance: 100%; }
+        }
+
+        /* ==============================================
+           响应式适配
+           ============================================== */
+        @media (max-width: 768px) {
+            .canvas {
+                height: 100vh;
+            }
+
+            .plc-unit {
+                top: 45%;
+                height: 220px;
+            }
+
+            .vfd-unit {
+                left: 5%;
+                top: 70%;
+                width: 140px;
+                height: 180px;
+            }
+
+            .sensor-relay-zone {
+                right: 5%;
+                top: 70%;
+            }
+
+            .component-card {
+                width: 160px;
+                padding: 10px;
+            }
+
+            .power-bus {
+                flex-wrap: wrap;
+                height: auto;
+                padding: 10px;
+                gap: 10px;
+                bottom: 20px;
+            }
+
+            .feature-tag {
+                font-size: 0.75rem;
+                padding: 6px 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="canvas">
+        <!-- 顶部信息 -->
+        <header class="header">
+            <h1>电气控制系统 —— 智慧库的“大脑与神经”</h1>
+            <p>
+                核心功能：接收网络通信系统的指令，控制机械系统的运行（如堆垛机启停、输送线速度调节），<br>
+                同时检测设备运行状态，反馈给网络通信系统，是连接机械系统与网络通信系统的核心纽带。
+            </p>
+        </header>
+
+        <!-- 神经网络路径 (SVG) -->
+        <svg class="nerve-system" viewBox="0 0 1200 800">
+            <path d="M 600 200 L 600 100 H 200" fill="none" stroke="var(--plc-blue)" stroke-width="1" />
+            <path d="M 480 320 L 240 520" fill="none" stroke="var(--vfd-purple)" stroke-width="1" />
+            <path d="M 720 320 L 900 520" fill="none" stroke="var(--signal-green)" stroke-width="1" />
+        </svg>
+
+        <!-- 信号粒子 -->
+        <div class="signal-particle" style="--path: 'M 600 450 L 600 150 H 150';"></div>
+        <div class="signal-particle" style="--path: 'M 150 150 H 600 V 450'; animation-delay: 1.5s;"></div>
+        <div class="signal-particle vfd" style="--path: 'M 480 450 L 240 650';"></div>
+        <div class="signal-particle sensor" style="--path: 'M 1020 650 L 720 450';"></div>
+
+        <!-- PLC 核心单元 -->
+        <section class="plc-unit">
+            <div class="plc-label">PLC 控制核心</div>
+            <div class="plc-screen">
+                <div class="scan-line" style="top: 30%;"></div>
+                <div class="scan-line"></div>
+            </div>
+            <div class="plc-status-grid">
+                <div class="status-led led-active"></div>
+                <div class="status-led led-active" style="animation-delay: 0.2s;"></div>
+                <div class="status-led"></div>
+                <div class="status-led led-active" style="animation-delay: 0.4s;"></div>
+                <div class="status-led"></div>
+                <div class="status-led led-active"></div>
+                <div class="status-led led-active" style="animation-delay: 0.1s;"></div>
+                <div class="status-led"></div>
+            </div>
+            <div class="plc-footer">核心控制单元 (CPU)</div>
+        </section>
+
+        <!-- 变频器单元 -->
+        <section class="vfd-unit">
+            <div class="vfd-label">变频器 (VFD)</div>
+            <div class="vfd-screen" id="vfdFreq">50.00</div>
+            <div class="vfd-desc">调节电机转速</div>
+            <div class="vfd-indicators">
+                <div class="indicator-light error"></div>
+                <div class="indicator-light running"></div>
+            </div>
+        </section>
+
+        <!-- 传感器与继电器 -->
+        <section class="sensor-relay-zone">
+            <div class="component-card">
+                <div class="icon-box">S</div>
+                <div class="component-info">
+                    <div class="component-title">传感器 (Sensor)</div>
+                    <div class="component-desc">检测货物位置与状态</div>
+                </div>
+            </div>
+            <div class="component-card">
+                <div class="icon-box relay">R</div>
+                <div class="component-info">
+                    <div class="component-title">继电器 (Relay)</div>
+                    <div class="component-desc">辅助控制逻辑切换</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 功能标注 -->
+        <div class="feature-tag" style="left: 100px; top: 100px;">指令接收 (网络系统)</div>
+        <div class="feature-tag status-feedback" style="right: 150px; top: 400px;">状态反馈</div>
+        <div class="feature-tag machine-control" style="left: 150px; top: 550px;">机械控制 (堆垛机/输送线)</div>
+
+        <!-- 底部供电总线 -->
+        <footer class="power-bus">
+            <div class="power-label">⚡ 24V/220V 稳压电源支撑</div>
+            <div class="power-bars">
+                <div class="power-bar"></div>
+                <div class="power-bar"></div>
+                <div class="power-bar"></div>
+            </div>
+            <div class="power-label small">核心纽带：稳定电源是系统根基</div>
+        </footer>
+    </div>
+
+    <script>
+        // ==============================================
+        // 全局常量定义
+        // ==============================================
+        const VFD_FREQ_RANGE = {
+            min: 49.95,
+            max: 50.05,
+            interval: 500
+        };
+        const LED_BLINK_INTERVAL = 800;
+
+        // ==============================================
+        // DOM 元素缓存
+        // ==============================================
+        const elements = {
+            vfdScreen: document.getElementById('vfdFreq'),
+            statusLeds: document.querySelectorAll('.status-led')
+        };
+
+        // ==============================================
+        // 工具函数
+        // ==============================================
+        /**
+         * 生成指定范围内的随机数并保留指定位数小数
+         * @param {number} min - 最小值
+         * @param {number} max - 最大值
+         * @param {number} decimals - 小数位数
+         * @returns {string} 格式化后的随机数
+         */
+        function getRandomNumber(min, max, decimals = 2) {
+            const randomNum = Math.random() * (max - min) + min;
+            return randomNum.toFixed(decimals);
+        }
+
+        /**
+         * 随机切换LED灯状态
+         * @param {NodeList} leds - LED元素列表
+         */
+        function toggleRandomLed(leds) {
+            const index = Math.floor(Math.random() * leds.length);
+            leds[index].classList.toggle('led-active');
+        }
+
+        // ==============================================
+        // 业务逻辑
+        // ==============================================
+        /**
+         * 初始化变频器频率显示
+         */
+        function initVfdFrequency() {
+            if (!elements.vfdScreen) return;
+            
+            setInterval(() => {
+                const freq = getRandomNumber(VFD_FREQ_RANGE.min, VFD_FREQ_RANGE.max);
+                elements.vfdScreen.textContent = freq;
+            }, VFD_FREQ_RANGE.interval);
+        }
+
+        /**
+         * 初始化PLC LED灯闪烁
+         */
+        function initPlcLeds() {
+            if (!elements.statusLeds.length) return;
+            
+            setInterval(() => {
+                toggleRandomLed(elements.statusLeds);
+            }, LED_BLINK_INTERVAL);
+        }
+
+        // ==============================================
+        // 初始化函数
+        // ==============================================
+        function init() {
+            initVfdFrequency();
+            initPlcLeds();
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
